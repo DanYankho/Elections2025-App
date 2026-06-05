@@ -4,6 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Malawi Election Map — Tablet/PC View</title>
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#1a73e8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data/mapLogo.png" type="image/png">
+  <link rel="apple-touch-icon" href="data/mapLogo.png">
 
   <!-- D3 -->
   <script src="https://d3js.org/d3.v7.min.js"></script>
@@ -2227,6 +2233,86 @@
     loadingIndicator.style("display", "none");
   }
 
+})();
+</script>
+
+<style>
+#install-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: none;
+}
+#install-btn {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 28px;
+  padding: 14px 24px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 16px rgba(26,115,232,0.4);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+#install-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(26,115,232,0.5);
+}
+#install-btn:active {
+  transform: translateY(0);
+}
+#install-btn .icon {
+  font-size: 20px;
+}
+</style>
+<div id="install-container">
+  <button id="install-btn"><span class="icon">⬇</span> Install App</button>
+</div>
+
+<script>
+(function() {
+  let deferredPrompt = null;
+  const installContainer = document.getElementById('install-container');
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installContainer.style.display = 'block';
+  });
+
+  document.getElementById('install-btn').addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const result = await deferredPrompt.userChoice;
+    if (result.outcome === 'accepted') {
+      console.log('User accepted the install prompt');
+    } else {
+      console.log('User dismissed the install prompt');
+    }
+    deferredPrompt = null;
+    installContainer.style.display = 'none';
+  });
+
+  window.addEventListener('appinstalled', () => {
+    installContainer.style.display = 'none';
+    deferredPrompt = null;
+    console.log('App was installed');
+  });
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js').then(reg => {
+        console.log('SW registered:', reg.scope);
+      }).catch(err => {
+        console.warn('SW registration failed:', err);
+      });
+    });
+  }
 })();
 </script>
 </body>
