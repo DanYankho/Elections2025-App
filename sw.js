@@ -1,6 +1,6 @@
 /* Elections by Equip - Service Worker v1 */
 
-const CACHE_NAME = "elections-v1";
+const CACHE_NAME = "elections-v27";
 
 const PRECACHE_URLS = [
   "./",
