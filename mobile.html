@@ -133,6 +133,9 @@
       /* PERF: Required for D3 zoom touch on real devices */
       touch-action: none;
       overflow: hidden;
+      /* FIX BLUR: Prevent WebKit from rasterizing SVG into a texture at low res.
+         transform-style: flat forces 2D compositing, keeping vectors crisp. */
+      transform-style: flat;
     }
 
     /* PERF: Districts — pointer-events none, rendering handled by click layer */
@@ -348,6 +351,7 @@
       .election-years { font-size: 11px; max-width: 180px; }
     }
   </style>
+<base target="_blank">
 </head>
 <body>
   <div class="header">
@@ -359,7 +363,7 @@
 
   <div class="powered-by-footer">
     <span class="powered-by-text">Powered by</span>
-    <img src="data/equipLogo.png" alt="Logo" class="powered-by-logo">
+    <img src="data/equipLogo.png" alt="Logo" class="powered-by-logo" loading="lazy" decoding="async">
   </div>
 
   <div id="map-root" role="application" aria-label="Malawi map">
@@ -478,13 +482,14 @@
     const clipRect = defs.append("clipPath").attr("id","map-clip")
       .append("rect").attr("x",0).attr("y",0).attr("width",width).attr("height",height);
 
-    // PERF: Single mapGroup with GPU layer promotion.
-    // All children (lakes, districts, labels, click targets) are inside this group.
+    // PERF: Single mapGroup. All children (lakes, districts, labels, click targets) are inside this group.
     // Pan/zoom is a single CSS transform on this one element — nothing else moves.
+    // FIX BLUR: Removed will-change: transform. GPU layer promotion causes WebKit to rasterize
+    // SVG at screen resolution then scale the texture up, creating blur. Without will-change,
+    // the browser re-renders vectors on every frame keeping edges crisp.
     const mapGroup = svg.append("g")
       .attr("id","mapGroup")
-      .attr("clip-path","url(#map-clip)")
-      .style("will-change","transform");
+      .attr("clip-path","url(#map-clip)");
 
     // Cache raw DOM node for the hot path — avoids D3 selection overhead per frame
     const mapGroupNode = mapGroup.node();
@@ -497,6 +502,9 @@
     const partyStats      = d3.select("#party-stats");
     const searchPanel     = d3.select("#search-panel");
     const header          = d3.select(".header");
+    const electionYearsEl = d3.select(".election-years");
+    const controlButtonsEl= d3.select(".control-buttons");
+    const footerEl        = d3.select(".powered-by-footer");
     const footer          = d3.select(".footer");
     const loadingEl       = d3.select("#loading");
     const votesButton     = d3.select("#votes-button");
@@ -722,7 +730,7 @@
       svg.call(zoomBehavior.transform,currentTransform);
       if(districtSelection) districtSelection.classed("faded",false).classed("focused",false);
       hideAllPanels();
-      header.classed("hidden",false);
+      showAllUI();
       if(districtLabels&&showLabels) districtLabels.classed("hidden",false);
     }
 
@@ -730,12 +738,25 @@
       hideAllPanels();
       panel.classed("visible",true).attr("aria-hidden","false");
       activePanel=panel;
-      header.classed("hidden",true);
+      hideAllUI();
     }
     function hideAllPanels(){
       [infoPanel,candidateStats,partyStats,searchPanel].forEach(p=>p.classed("visible",false).attr("aria-hidden","true"));
       activePanel=null;
-      if(!selectedFeature) header.classed("hidden",false);
+    }
+
+    // UX: Hide all chrome (header, buttons, footer, year badge) when focused on district or panel
+    function hideAllUI(){
+      header.classed("hidden",true);
+      electionYearsEl.style("display","none");
+      controlButtonsEl.style("display","none");
+      footerEl.style("display","none");
+    }
+    function showAllUI(){
+      header.classed("hidden",false);
+      electionYearsEl.style("display",null);
+      controlButtonsEl.style("display",null);
+      footerEl.style("display",null);
     }
 
     function updateMapForYear(year){
@@ -771,7 +792,7 @@
       const id=d.id||(d.properties&&(d.properties.id||d.properties.NAME_1||d.properties.DISTRICT))||null;
       if(selectedFeature&&selectedFeatureId===id){ resetView(); return; }
       selectedFeature=d; selectedFeatureId=id;
-      header.classed("hidden",true);
+      hideAllUI();
       focusOnFeature(d);
       districtSelection.classed("faded",dd=>dd!==d);
       if(event.currentTarget) d3.select(event.currentTarget).classed("faded",false).classed("focused",true).raise();
@@ -881,10 +902,9 @@
         loadingEl.style("display","flex");
         const geo=await d3.json("data/malawi_districts.geojson");
         geoData=geo;
-        const results=await Promise.all(years.map(y=>loadElectionData(y)));
-        years.forEach((y,i)=>allElectionData[y]=results[i]||{electionData:{},partyColors:{}});
-        updateProjection();
 
+        // PERF: Render map immediately so users can interact while election data loads in background
+        updateProjection();
         const features=geoData.features||[];
         const lakes=features.filter(isLake);
         const districts=features.filter(f=>!isLake(f));
@@ -911,8 +931,18 @@
         initZoom();
 
         d3.select("#page-title").text(`Malawi Presidential Election — ${currentYear}`);
-        updateStatsPanels(currentYear);
+        updateNavigationButtons();
         footer.style("display",currentYear==="2025"?"block":"none");
+
+        // Map is now interactive — hide loading spinner
+        loadingEl.style("display","none");
+
+        // PERF: Load election CSVs in background so colors & stats populate after map is usable
+        Promise.all(years.map(y=>loadElectionData(y))).then(results=>{
+          years.forEach((y,i)=>allElectionData[y]=results[i]||{electionData:{},partyColors:{}});
+          updateMapForYear(currentYear);
+          updateStatsPanels(currentYear);
+        });
 
         votesButton.on("click",()=>showPanel(candidateStats));
         districtsButton.on("click",()=>showPanel(partyStats));
@@ -937,8 +967,6 @@
 
         buildYearList();
         updateMapForYear(currentYear);
-        updateNavigationButtons();
-        loadingEl.style("display","none");
 
       }catch(err){
         console.error("Init error:",err);
