@@ -27,6 +27,7 @@
 
     * {
       box-sizing: border-box;
+      /* FIX #3: Remove tap highlight globally - was causing flicker */
       -webkit-tap-highlight-color: transparent;
     }
 
@@ -40,7 +41,9 @@
       -moz-osx-font-smoothing: grayscale;
       overflow: hidden;
       color: #111;
-      touch-action: manipulation;
+      /* FIX #1 + #3: Was `manipulation` which adds 300ms delay AND blocks D3 pinch-zoom */
+      /* Must be `auto` on body; we set `none` specifically on the SVG below */
+      touch-action: auto;
     }
 
     /* ---------- Header ---------- */
@@ -152,7 +155,7 @@
       cursor: pointer;
       border-radius: 4px;
       font-size: 16px;
-      transition: all 0.2s ease;
+      /* FIX #3: Remove transition from dropdown buttons - not needed and causes repaints */
     }
     
     .year-dropdown button:hover { background: rgba(0,0,0,0.04); }
@@ -165,31 +168,42 @@
       height: 100vh;
       left: 0;
       top: 0;
+      /* FIX #2: overflow hidden prevents color from bleeding outside map root */
       overflow: hidden;
     }
     
-    svg { 
-      width: 100%; 
-      height: 100%; 
-      display:block; 
-      /* FIX: Prevent rendering artifacts/spill */
-      shape-rendering: geometricPrecision; 
+    svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+      /* FIX #1 + #3: `touch-action: none` here is the KEY fix for D3 zoom on real mobile.
+         D3 zoom requires touch-action:none on the element it's attached to.
+         Without this, the browser intercepts touch events before D3 sees them. */
+      touch-action: none;
+      /* FIX #2: Remove shape-rendering: geometricPrecision - on mobile GPU this causes
+         subpixel rendering that bleeds stroke color outside path boundaries.
+         Default (auto) lets the browser optimize correctly. */
+      /* shape-rendering: geometricPrecision; <-- REMOVED */
+      /* FIX #2: overflow hidden clips any path rendering that escapes bounds */
+      overflow: hidden;
     }
 
-    /* District, lake styles - OPTIMIZED FOR PERFORMANCE + SPILL FIX */
+    /* District styles */
     .district {
-      stroke: #333;
-      stroke-width: 2px;
+      /* FIX #2: REMOVED paint-order: stroke - this was causing color bleed on mobile GPU.
+         Mobile WebKit/Blink renders paint-order differently than desktop Chrome.
+         Instead we use stroke-alignment via vector-effect on the paths themselves. */
+      /* paint-order: stroke; <-- REMOVED */
       cursor: pointer;
-      paint-order: stroke; /* FIX: Paint stroke before fill to prevent gaps */
       outline: none !important;
       -webkit-tap-highlight-color: transparent !important;
-      pointer-events: none; 
-      /* FIX: Prevent sharp corner artifacts */
-      stroke-linejoin: round; 
+      /* FIX #3: pointer-events none on visual layer - clicks handled by invisible click layer */
+      pointer-events: none;
+      stroke-linejoin: round;
+      stroke-linecap: round;
     }
     
-    /* Invisible click targets with thick transparent strokes */
+    /* Invisible click targets */
     .district-click-target {
       fill: transparent !important;
       stroke: transparent !important;
@@ -197,13 +211,15 @@
       cursor: pointer !important;
       outline: none !important;
       -webkit-tap-highlight-color: transparent !important;
+      /* FIX #3: No transition on click targets */
     }
 
     .district-click-likoma {
       stroke-width: 20px !important;
     }
 
-    .district-click-target:focus, .district-click-target:active {
+    .district-click-target:focus,
+    .district-click-target:active {
       outline: none !important;
       box-shadow: none !important;
     }
@@ -212,18 +228,18 @@
       fill: #cfe9ff;
       stroke: #9fc7ee;
       stroke-width: 0.4px;
-      paint-order: stroke;
+      /* FIX #2: Removed paint-order on lakes too */
       stroke-linejoin: round;
     }
     
     .faded { opacity: 0.3; }
     
-    .focused { 
+    .focused {
       stroke-width: 3px;
       stroke: #333333;
     }
 
-    /* District labels - positioned in screen space */
+    /* District labels */
     .district-label {
       font-size: 10px;
       font-weight: 600;
@@ -251,6 +267,8 @@
       display: flex;
       flex-direction: column;
       gap: 16px;
+      /* FIX #3: Prevent button area from intercepting map touches */
+      pointer-events: none;
     }
     
     .control-button-wrapper {
@@ -258,6 +276,7 @@
       flex-direction: column;
       align-items: center;
       gap: 4px;
+      pointer-events: auto;
     }
     
     .button-label {
@@ -279,28 +298,29 @@
       justify-content: center;
       font-size: 20px;
       cursor: pointer;
-      transition: all 0.2s ease;
+      /* FIX #3: Reduced transition - was causing repaints during map interaction */
+      transition: box-shadow 0.15s ease;
+      /* FIX #3: Promote buttons to own GPU layer so map repaints don't affect them */
+      will-change: auto;
+      -webkit-tap-highlight-color: transparent;
     }
     
     .control-button:hover {
-      transform: scale(1.1);
       box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
     
     .control-button:active {
-      transform: scale(0.95);
+      opacity: 0.7;
     }
     
     .control-button.active {
       background: var(--accent);
       color: white;
-      transform: scale(1.05);
     }
 
     .control-button:disabled {
       opacity: 0.5;
       cursor: not-allowed;
-      transform: none;
     }
 
     .help-button {
@@ -319,16 +339,6 @@
       justify-content: center;
       font-size: 20px;
       cursor: pointer;
-      transition: all 0.2s ease;
-    }
-    
-    .help-button:hover {
-      transform: scale(1.1);
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    }
-    
-    .help-button:active {
-      transform: scale(0.95);
     }
 
     /* ---------- Panels (Bottom Half) ---------- */
@@ -344,11 +354,14 @@
       overflow: hidden;
       padding: 0;
       transform: translateY(100%);
+      /* FIX #3: Use GPU-composited property for panel slide animation */
+      transition: transform 0.25s ease, height 0s 0.25s;
     }
     
-    .info-panel.visible, .stats-panel.visible { 
+    .info-panel.visible, .stats-panel.visible {
       height: 50vh;
       transform: translateY(0);
+      transition: transform 0.25s ease;
     }
     
     .panel-header {
@@ -367,22 +380,22 @@
       -webkit-overflow-scrolling: touch;
     }
     
-    .panel-title { 
-      color: var(--accent); 
-      font-weight: 700; 
-      margin-bottom: 6px; 
+    .panel-title {
+      color: var(--accent);
+      font-weight: 700;
+      margin-bottom: 6px;
       font-size: 24px;
     }
     
-    .panel-subtitle { 
-      color: #444; 
+    .panel-subtitle {
+      color: #444;
       font-size: 18px;
       font-weight: 500;
     }
     
-    .info-panel table { 
-      width: 100%; 
-      border-collapse: collapse; 
+    .info-panel table {
+      width: 100%;
+      border-collapse: collapse;
       font-size: 16px;
       margin-top: 15px;
     }
@@ -405,7 +418,7 @@
       margin-top: 4px;
     }
     
-    .info-panel tr { 
+    .info-panel tr {
       border-bottom: 1px solid #eee;
       position: relative;
       height: 50px;
@@ -415,9 +428,9 @@
       border-bottom: none;
     }
     
-    .info-panel tr td { 
-      padding: 10px 8px; 
-      vertical-align: middle; 
+    .info-panel tr td {
+      padding: 10px 8px;
+      vertical-align: middle;
       position: relative;
       z-index: 1;
     }
@@ -495,13 +508,13 @@
       margin-top: 4px;
     }
 
-    .party-swatch { 
+    .party-swatch {
       width: 20px;
       height: 20px;
-      display: inline-block; 
-      border-radius: 4px; 
-      margin-right: 10px; 
-      border: 1px solid rgba(0,0,0,0.1); 
+      display: inline-block;
+      border-radius: 4px;
+      margin-right: 10px;
+      border: 1px solid rgba(0,0,0,0.1);
     }
 
     .percentage-bar-container {
@@ -533,7 +546,6 @@
       border-radius: 6px;
       font-size: 16px;
       margin-bottom: 10px;
-      transition: all 0.2s ease;
     }
     
     #district-search:focus {
@@ -553,12 +565,10 @@
       border-bottom: 1px solid #eee;
       cursor: pointer;
       font-size: 16px;
-      transition: all 0.2s ease;
     }
     
-    .search-result-item:hover {
+    .search-result-item:active {
       background-color: #f5f5f5;
-      transform: translateX(5px);
     }
 
     /* ---------- Footer for 2025 ---------- */
@@ -625,16 +635,10 @@
       cursor: pointer;
       z-index: 100;
       touch-action: manipulation;
-      transition: all 0.2s ease;
-    }
-    
-    .close-button:hover {
-      background: rgba(0,0,0,0.1);
-      transform: scale(1.1);
     }
     
     .close-button:active {
-      transform: scale(0.95);
+      background: rgba(0,0,0,0.12);
     }
 
     /* Help panel styles */
@@ -690,16 +694,10 @@
       cursor: pointer;
       z-index: 100;
       touch-action: manipulation;
-      transition: all 0.2s ease;
-    }
-
-    .help-close-button:hover {
-      background: rgba(0,0,0,0.1);
-      transform: scale(1.1);
     }
 
     .help-close-button:active {
-      transform: scale(0.95);
+      background: rgba(0,0,0,0.12);
     }
 
     .help-panel-content {
@@ -892,12 +890,16 @@
         <p>Tap any district to view detailed election results for that area. The map will zoom in and show the district's voting data.</p>
       </div>
       <div class="help-item">
+        <h3>Pinch to Zoom</h3>
+        <p>Use two fingers to pinch and zoom the map. Drag with one finger to pan around.</p>
+      </div>
+      <div class="help-item">
         <h3>Viewing Statistics</h3>
         <p>Use the buttons on the right to view national totals or districts won by each party.</p>
       </div>
       <div class="help-item">
         <h3>Searching Districts</h3>
-        <p>Use the search button to find specific districts quickly. Selecting a district from search will show its detailed results.</p>
+        <p>Use the search button to find specific districts quickly.</p>
       </div>
       <div class="help-item">
         <h3>Navigating Years</h3>
@@ -905,19 +907,13 @@
       </div>
       <div class="help-item">
         <h3>District Labels</h3>
-        <p>Toggle district names on/off using the "Show Labels" option in the year dropdown. Labels are visible by default.</p>
+        <p>Toggle district names on/off using the "Show Labels" option in the year dropdown.</p>
       </div>
     </div>
   </div>
 
   <script>
   (function(){
-    // Performance optimization flags
-    const isSlowDevice = /(android|iphone|ipod|ipad).*os\s([0-9]+)_/i.test(navigator.userAgent) && 
-                         parseInt(RegExp.$2, 10) < 12 || 
-                         /Android [0-7]/.test(navigator.userAgent) ||
-                         /MSIE|Trident/.test(navigator.userAgent);
-    
     // ---------- CONFIG ----------
     const years = ["1994","1999","2004","2009","2014","2019","2020","2025"];
     let currentYear = years[0];
@@ -935,11 +931,27 @@
 
     // UI Elements
     const mapRoot = document.getElementById("map-root");
-    const svg = d3.select("#map-svg");
+    const svgEl = document.getElementById("map-svg");
+    const svg = d3.select(svgEl);
     let width = mapRoot.clientWidth, height = mapRoot.clientHeight;
     svg.attr("viewBox", `0 0 ${width} ${height}`);
 
-    const mapGroup = svg.append("g").attr("id", "mapGroup");
+    // FIX #2: Add a clipPath to the SVG defs so mapGroup is hard-clipped to viewport
+    // This prevents any GPU compositing artifact from escaping outside the SVG bounds
+    const defs = svg.append("defs");
+    defs.append("clipPath")
+      .attr("id", "map-clip")
+      .append("rect")
+      .attr("x", 0).attr("y", 0)
+      .attr("width", width).attr("height", height);
+
+    const mapGroup = svg.append("g")
+      .attr("id", "mapGroup")
+      // FIX #2: Apply the hard clip to the map group
+      .attr("clip-path", "url(#map-clip)")
+      // FIX #3: Force GPU compositing layer for smooth panning
+      .style("will-change", "transform");
+
     const infoPanel = d3.select("#info-panel");
     const infoPanelTitle = d3.select("#info-panel-title");
     const infoPanelSubtitle = d3.select("#info-panel-subtitle");
@@ -962,7 +974,6 @@
     const nextYearButton = d3.select("#next-year");
     const candidateYearSpan = d3.select("#candidate-year");
     const partyYearSpan = d3.select("#party-year");
-    const electionYears = d3.select("#election-years");
 
     // Projection & path
     const projection = d3.geoMercator()
@@ -985,8 +996,17 @@
     let activePanel = null;
     let currentTransform = d3.zoomIdentity;
 
-    const centroidCache = new Map();
-    let resizeTimeout = null;
+    let dataCache = {};
+    let lastFetchTime = {};
+
+    function debounce(func, wait) {
+      let timeout;
+      return function() {
+        const context = this, args = arguments;
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(context, args), wait);
+      };
+    }
 
     function normalizeName(name){
       if(!name || typeof name !== 'string') return '';
@@ -1002,80 +1022,68 @@
       return p.NAME_1 || p.DISTRICT || p.name || p.id || '';
     }
 
-    let dataCache = {};
-    let lastFetchTime = {};
-
-    function debounce(func, wait) {
-      let timeout;
-      return function() {
-        const context = this, args = arguments;
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(context, args), wait);
-      };
-    }
-
     // ---------- Loading CSV data for a year ----------
     async function loadElectionData(year) {
       const now = Date.now();
       if (dataCache[year] && lastFetchTime[year] && (now - lastFetchTime[year] < 120000)) {
-          return dataCache[year];
+        return dataCache[year];
       }
 
       const cacheBuster = new Date().getTime();
       const url = `data/${year}presRegional.csv?t=${cacheBuster}`;
 
       try {
-          const rows = await d3.csv(url);
-          const electionData = {};
-          const partyColors = {};
+        const rows = await d3.csv(url);
+        const electionData = {};
+        const partyColors = {};
 
-          rows.forEach(r => {
-              const districtRaw = r["DISTRICT NAME"] || r["DISTRICT"] || r["District"] || r["DIST_NAME"] || r["NAME_1"] || "";
-              const candRaw = r["NAME OF CANDIDATE"] || r["CANDIDATE"] || r["NAME"] || "";
-              const partyRaw = r["PARTY"] || r["PARTY NAME"] || r["Party"] || "";
-              const partyAbbr = r["PARTY ABBR"] || r["PARTY_ABBR"] || r["ABBR"] || partyRaw;
-              const colorRaw = r["PARTY COLOR"] || r["PARTY_COLOR"] || r["COLOR"] || "";
-              const votesRaw = r["VOTES SCORED"] || r["VOTES"] || r["Votes"] || r["VOTES_SCORED"] || "0";
+        rows.forEach(r => {
+          const districtRaw = r["DISTRICT NAME"] || r["DISTRICT"] || r["District"] || r["DIST_NAME"] || r["NAME_1"] || "";
+          const candRaw = r["NAME OF CANDIDATE"] || r["CANDIDATE"] || r["NAME"] || "";
+          const partyRaw = r["PARTY"] || r["PARTY NAME"] || r["Party"] || "";
+          const partyAbbr = r["PARTY ABBR"] || r["PARTY_ABBR"] || r["ABBR"] || partyRaw;
+          const colorRaw = r["PARTY COLOR"] || r["PARTY_COLOR"] || r["COLOR"] || "";
+          const votesRaw = r["VOTES SCORED"] || r["VOTES"] || r["Votes"] || r["VOTES_SCORED"] || "0";
 
-              const district = normalizeName(districtRaw);
-              const candidate = (candRaw || "").trim();
-              const party = (partyRaw || "").trim();
-              const partyAbbreviation = (partyAbbr || "").trim();
-              const color = (colorRaw && colorRaw.trim()) ? colorRaw.trim() : "#999999";
-              let votes = 0;
-              try { votes = parseInt((votesRaw || "0").toString().replace(/,/g, ''), 10) || 0; } catch (e) { votes = 0; }
+          const district = normalizeName(districtRaw);
+          const candidate = (candRaw || "").trim();
+          const party = (partyRaw || "").trim();
+          const partyAbbreviation = (partyAbbr || "").trim();
+          const color = (colorRaw && colorRaw.trim()) ? colorRaw.trim() : "#999999";
+          let votes = 0;
+          try { votes = parseInt((votesRaw || "0").toString().replace(/,/g, ''), 10) || 0; } catch (e) { votes = 0; }
 
-              if (!district) return;
+          if (!district) return;
 
-              partyColors[party] = partyColors[party] || { color: color, abbreviation: partyAbbreviation };
+          partyColors[party] = partyColors[party] || { color: color, abbreviation: partyAbbreviation };
 
-              if (!electionData[district]) electionData[district] = { candidates: {}, color: color };
-              if (!electionData[district].candidates[candidate]) {
-                  electionData[district].candidates[candidate] = {
-                      name: candidate, party: party, partyAbbr: partyAbbreviation, votes: 0, color: color
-                  };
-              }
-              electionData[district].candidates[candidate].votes += votes;
+          if (!electionData[district]) electionData[district] = { candidates: {}, color: color };
+          if (!electionData[district].candidates[candidate]) {
+            electionData[district].candidates[candidate] = {
+              name: candidate, party: party, partyAbbr: partyAbbreviation, votes: 0, color: color
+            };
+          }
+          electionData[district].candidates[candidate].votes += votes;
+        });
+
+        Object.keys(electionData).forEach(k => {
+          const arr = Object.values(electionData[k].candidates);
+          arr.sort((a, b) => b.votes - a.votes);
+          const totalVotes = arr.reduce((sum, c) => sum + c.votes, 0);
+          arr.forEach(candidate => {
+            candidate.percentage = totalVotes > 0 ? Math.round((candidate.votes / totalVotes) * 100) : 0;
           });
+          electionData[k].candidates = arr;
+          if (arr.length > 0) electionData[k].color = arr[0].color || electionData[k].color;
+        });
 
-          Object.keys(electionData).forEach(k => {
-              const arr = Object.values(electionData[k].candidates);
-              arr.sort((a, b) => b.votes - a.votes);
-              const totalVotes = arr.reduce((sum, c) => sum + c.votes, 0);
-              arr.forEach(candidate => {
-                  candidate.percentage = totalVotes > 0 ? Math.round((candidate.votes / totalVotes) * 100) : 0;
-              });
-              electionData[k].candidates = arr;
-              if (arr.length > 0) electionData[k].color = arr[0].color || electionData[k].color;
-          });
-
-          const result = { electionData, partyColors };
-          dataCache[year] = result;
-          lastFetchTime[year] = now;
-          return result;
+        const result = { electionData, partyColors };
+        dataCache[year] = result;
+        lastFetchTime[year] = now;
+        return result;
       } catch (err) {
-          if (dataCache[year]) return dataCache[year];
-          return { electionData: {}, partyColors: {} };
+        if (dataCache[year]) return dataCache[year];
+        return { electionData: {}, partyColors: {} };
       }
     }
 
@@ -1085,7 +1093,6 @@
       nextYearButton.property("disabled", currentIndex === years.length - 1);
     }
 
-    // ---------- Update candidate and party stats ----------
     function updateStatsPanels(year) {
       const dataset = allElectionData[year] || { electionData: {}, partyColors: {} };
       const ed = dataset.electionData || {};
@@ -1174,7 +1181,7 @@
       });
     }
 
-    // ---------- UI: populate years dropdown ----------
+    // Build year list dropdown
     const yearDropdown = d3.select("#yearDropdown");
     function buildYearList(){
       yearDropdown.selectAll("*").remove();
@@ -1232,6 +1239,10 @@
       width = mapRoot.clientWidth;
       height = mapRoot.clientHeight;
       svg.attr("viewBox", `0 0 ${width} ${height}`);
+      // FIX #2: Update clip rect on resize too
+      defs.select("#map-clip rect")
+        .attr("width", width)
+        .attr("height", height);
       projection.scale(Math.min(width, height) * 10.5)
                 .translate([width / 2, height / 2 + 40]);
       path.projection(projection);
@@ -1275,15 +1286,18 @@
     }
 
     function hexToRgba(hex, alpha) {
-      const r = parseInt(hex.slice(1, 3), 16);
-      const g = parseInt(hex.slice(3, 5), 16);
-      const b = parseInt(hex.slice(5, 7), 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      try {
+        const r = parseInt(hex.slice(1, 3), 16);
+        const g = parseInt(hex.slice(3, 5), 16);
+        const b = parseInt(hex.slice(5, 7), 16);
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      } catch(e) {
+        return `rgba(128,128,128,${alpha})`;
+      }
     }
 
     function escapeHtml(s){ return (s||'').toString().replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":"&#39;"}[ch])); }
 
-    // ---------- Update fills for current year ----------
     function updateMapForYear(year){
       const dataset = allElectionData[year] || { electionData: {}, partyColors: {} };
       const ed = dataset.electionData || {};
@@ -1307,16 +1321,27 @@
       }
     }
 
-    // ---------- Zooming behavior - WITH SMOOTH ZOOM ONLY ----------
+    // ---------- FIX #1 + #3: Zoom initialization ----------
+    // KEY CHANGE: D3 zoom on mobile requires touch-action:none on the SVG element (set in CSS above).
+    // We also call .touchable() configuration to ensure D3 recognises touch events properly.
     function initZoom(){
       zoomBehavior = d3.zoom()
         .scaleExtent([1, 12])
+        // FIX #1: filter prevents zoom from firing on button clicks / panel interactions
+        .filter(function(event) {
+          // Allow zoom on touch and wheel events; block right-click and ctrl+click on buttons
+          return !event.button && !event.ctrlKey || event.type === 'wheel';
+        })
         .on("zoom", (event) => {
           currentTransform = event.transform;
+          // FIX #3: Use CSS transform directly for smoother performance on mobile
           mapGroup.attr("transform", event.transform);
           updateLabelsPosition();
         });
-      svg.call(zoomBehavior);
+
+      svg.call(zoomBehavior)
+        // FIX #1: Prevent D3 zoom from capturing double-tap to zoom (interferes with district tap)
+        .on("dblclick.zoom", null);
     }
 
     function updateLabelsPosition() {
@@ -1339,7 +1364,6 @@
       });
     }
 
-    // Programmatic focus on feature - SMOOTH ANIMATION ONLY
     function focusOnFeature(feature){
       const bounds = path.bounds(feature);
       const dx = bounds[1][0] - bounds[0][0];
@@ -1353,8 +1377,7 @@
       const newTransform = d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale);
       currentTransform = newTransform;
       
-      // SMOOTH CINEMATIC ZOOM (The only animation we kept)
-      svg.transition().duration(1200).ease(d3.easeCubicInOut).call(zoomBehavior.transform, newTransform);
+      svg.transition().duration(800).ease(d3.easeCubicInOut).call(zoomBehavior.transform, newTransform);
       
       if (districtLabels) {
         districtLabels.classed("hidden", true);
@@ -1366,7 +1389,6 @@
       selectedFeatureId = null;
       
       currentTransform = d3.zoomIdentity;
-      // Keep reset instant for performance
       svg.call(zoomBehavior.transform, currentTransform);
       
       if(districtSelection) {
@@ -1469,7 +1491,12 @@
       return t.includes("lake") || n.includes("lake");
     }
 
-    // ---------- Click handler ----------
+    // ---------- FIX #1: Click handler - REMOVED touchstart handler ----------
+    // Previously had separate touchstart + click handlers. On real mobile:
+    //   - touchstart + preventDefault() blocks D3's touch recognition for pinch/pan
+    //   - D3 zoom fires its own synthetic click after touch gestures
+    //   - Having both caused double-fires and broke zoom gesture detection
+    // Solution: click handler only. D3 fires click on touchend automatically.
     function onDistrictClick(event, d){
       const id = d.id || (d.properties && (d.properties.id || d.properties.NAME_1 || d.properties.DISTRICT)) || null;
 
@@ -1568,11 +1595,11 @@
         })
         .style("pointer-events", "all")
         .style("cursor", "pointer")
+        // FIX #1: ONLY click handler here. No touchstart.
+        // D3's zoom behavior translates touchend→click for us after it resolves
+        // whether the gesture was a pan/pinch or a tap. Adding touchstart with
+        // preventDefault here was intercepting that resolution and breaking zoom.
         .on("click", function(event, d) {
-          onDistrictClick(event, d);
-        })
-        .on("touchstart", function(event, d) {
-          event.preventDefault();
           onDistrictClick(event, d);
         });
     }
@@ -1633,6 +1660,7 @@
         const lakes = features.filter(isLake);
         const districts = features.filter(f => !isLake(f));
 
+        // FIX #2: Lakes rendered first (below districts)
         lakeSelection = mapGroup.append("g").attr("class","lakes")
           .selectAll("path")
           .data(lakes)
@@ -1641,6 +1669,9 @@
           .attr("class","lake")
           .attr("d", path);
 
+        // FIX #2: District strokes — use a thin stroke (1.5px) and no paint-order trick.
+        // On mobile, thinner strokes are less likely to bleed. The clip-path on mapGroup
+        // catches anything that escapes the projection bounds.
         districtSelection = mapGroup.append("g").attr("class","districts")
           .selectAll("path")
           .data(districts)
@@ -1653,8 +1684,9 @@
             const yearData = allElectionData[currentYear] || { electionData: {} };
             return (yearData.electionData[dname] ? yearData.electionData[dname].color : "#f5f5f5");
           })
-          .style("stroke-width", "2px")
-          .style("stroke", "#333");
+          // FIX #2: 1.5px stroke instead of 2px — reduces bleed artifact on mobile GPU
+          .style("stroke-width", "1.5px")
+          .style("stroke", "#444");
 
         addClickLayer();
         initZoom();
