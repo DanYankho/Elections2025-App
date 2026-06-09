@@ -1,6 +1,6 @@
 {
-  "name": "Elections by Equip",
-  "short_name": "Elections by Equip",
+  "name": "Equip Elections",
+  "short_name": "Elections",
   "start_url": "./",
   "display": "standalone",
   "background_color": "#ffffff",
